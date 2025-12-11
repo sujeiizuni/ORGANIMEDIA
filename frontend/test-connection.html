@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de Conexión - ORGANIMEDIA</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d62828;
+            border-bottom: 3px solid #fcbf49;
+            padding-bottom: 10px;
+        }
+        .test {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #ccc;
+            background: #f9f9f9;
+        }
+        .test.success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .test.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .test.loading {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        button {
+            background: #d62828;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #b02323;
+        }
+        pre {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.ok {
+            background: #28a745;
+            color: white;
+        }
+        .status.fail {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 Test de Conexión ORGANIMEDIA</h1>
+        
+        <p>Este archivo prueba la conexión entre el frontend y el backend.</p>
+        
+        <button onclick="testBackendConnection()">Probar Conexión al Backend</button>
+        <button onclick="testHealthEndpoint()">Test Health Endpoint</button>
+        <button onclick="testAPIEndpoint()">Test API Info</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const resultsDiv = document.getElementById('results');
+
+        function addResult(title, status, message, data = null) {
+            const testDiv = document.createElement('div');
+            testDiv.className = `test ${status}`;
+            
+            let html = `
+                <h3>${title} <span class="status ${status === 'success' ? 'ok' : 'fail'}">${status.toUpperCase()}</span></h3>
+                <p>${message}</p>
+            `;
+            
+            if (data) {
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        }
+
+        async function testBackendConnection() {
+            resultsDiv.innerHTML = '';
+            addResult('🔄 Probando Conexión...', 'loading', 'Intentando conectar con el backend...');
+            
+            try {
+                const response = await fetch(API_URL);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.innerHTML = '';
+                    addResult('✅ Conexión Exitosa', 'success', 
+                        `Backend respondió correctamente en ${API_URL}`, data);
+                } else {
+                    resultsDiv.innerHTML = '';
+                    addResult('❌ Error HTTP', 'error', 
+                        `El backend respondió con status ${response.status}`);
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = '';
+                addResult('❌ Error de Conexión', 'error', 
+                    'No se pudo conectar al backend. Asegúrate de que esté corriendo en http://localhost:3000', 
+                    { error: error.message });
+            }
+        }
+
+        async function testHealthEndpoint() {
+            resultsDiv.innerHTML = '';
+            addResult('🔄 Probando Health Check...', 'loading', 'Verificando estado del servidor...');
+            
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.innerHTML = '';
+                    
+                    if (data.status === 'OK' && data.database === 'connected') {
+                        addResult('✅ Health Check Exitoso', 'success', 
+                            'El servidor y la base de datos están funcionando correctamente', data);
+                    } else {
+                        addResult('⚠️ Advertencia', 'error', 
+                            'El servidor responde pero hay problemas con la BD', data);
+                    }
+                } else {
+                    resultsDiv.innerHTML = '';
+                    addResult('❌ Error Health Check', 'error', 
+                        `Health endpoint respondió con status ${response.status}`);
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = '';
+                addResult('❌ Error de Conexión', 'error', 
+                    'No se pudo conectar al health endpoint', 
+                    { error: error.message });
+            }
+        }
+
+        async function testAPIEndpoint() {
+            resultsDiv.innerHTML = '';
+            addResult('🔄 Probando API Info...', 'loading', 'Obteniendo información de la API...');
+            
+            try {
+                const response = await fetch(API_URL);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.innerHTML = '';
+                    addResult('✅ API Info Obtenida', 'success', 
+                        'Información completa de la API recibida', data);
+                } else {
+                    resultsDiv.innerHTML = '';
+                    addResult('❌ Error API Info', 'error', 
+                        `API info endpoint respondió con status ${response.status}`);
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = '';
+                addResult('❌ Error de Conexión', 'error', 
+                    'No se pudo obtener información de la API', 
+                    { error: error.message });
+            }
+        }
+
+        // Test automático al cargar la página
+        window.addEventListener('load', () => {
+            setTimeout(testHealthEndpoint, 500);
+        });
+    </script>
+</body>
+</html>

@@ -245,8 +245,8 @@ async function handleAddTask(e) {
         return;
     }
     
-    const title = document.getElementById('task-title').value;
-    const description = document.getElementById('task-description').value;
+    const title = document.getElementById('task-title').value.trim();
+    const description = document.getElementById('task-description').value.trim();
     const date = document.getElementById('task-date').value;
     const priority = document.getElementById('task-priority').value;
     const reminder = document.getElementById('task-reminder').checked;
@@ -265,7 +265,7 @@ async function handleAddTask(e) {
             },
             body: JSON.stringify({
                 title,
-                description,
+                description: description || null,
                 task_date: date,
                 priority,
                 reminder
@@ -275,19 +275,20 @@ async function handleAddTask(e) {
         const data = await response.json();
         
         if (!response.ok) {
+            // Manejar errores de validación del backend
+            if (data.details) {
+                const errorMessages = data.details.map(err => err.msg).join(', ');
+                throw new Error(errorMessages);
+            }
             throw new Error(data.error || 'Error al crear la tarea');
         }
-        
-        // Agregar tarea a la lista local
-        tasks.push(data.task);
         
         // Limpiar formulario
         e.target.reset();
         setTodayDate();
         
-        // Actualizar calendario
-        renderCalendar();
-        loadTodayTasks();
+        // Recargar todas las tareas del servidor
+        await loadUserTasks();
         
         // Cerrar panel y mostrar notificación
         closePanel();
@@ -310,7 +311,7 @@ async function saveSettings() {
     }
     
     try {
-        const response = await fetch(`${API_BASE_URL}/auth/update-profile`, {
+        const response = await fetch(`${API_BASE_URL}/auth/profile`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -353,17 +354,29 @@ async function loadUserTasks() {
         const response = await fetch(`${API_BASE_URL}/tasks`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
             }
         });
         
         const data = await response.json();
         
         if (!response.ok) {
+            // Manejar token expirado
+            if (response.status === 401) {
+                handleLogout();
+                showNotification('Sesión expirada. Por favor, inicia sesión nuevamente', 'error');
+                return;
+            }
             throw new Error(data.error || 'Error al cargar las tareas');
         }
         
-        tasks = data;
+        // El backend ahora devuelve { count, tasks }
+        tasks = data.tasks || data;
+        
+        console.log('📋 Tareas cargadas:', tasks.length);
+        console.log('📋 Detalles de tareas:', tasks);
+        
         renderCalendar();
         loadTodayTasks();
         
@@ -378,7 +391,11 @@ function loadTodayTasks() {
     const today = new Date();
     const todayStr = formatDateForAPI(today);
     
-    const todayTasks = tasks.filter(task => task.task_date === todayStr);
+    // Filtrar tareas extrayendo solo la fecha del timestamp ISO
+    const todayTasks = tasks.filter(task => {
+        const taskDate = task.task_date.split('T')[0];
+        return taskDate === todayStr;
+    });
     
     const tasksList = document.getElementById('today-tasks-list');
     
@@ -423,13 +440,23 @@ async function toggleTaskCompletion(taskId) {
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         
-        const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-            method: 'PUT',
+        // Usar el endpoint específico para completar o actualizar
+        const endpoint = task.completed 
+            ? `${API_BASE_URL}/tasks/${taskId}` // Para descompletar, usamos PUT
+            : `${API_BASE_URL}/tasks/${taskId}/complete`; // Para completar, usamos PATCH
+        
+        const method = task.completed ? 'PUT' : 'PATCH';
+        const body = task.completed 
+            ? JSON.stringify({ completed: false })
+            : null;
+        
+        const response = await fetch(endpoint, {
+            method: method,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ completed: !task.completed })
+            ...(body && { body })
         });
         
         const data = await response.json();
@@ -438,14 +465,10 @@ async function toggleTaskCompletion(taskId) {
             throw new Error(data.error || 'Error al actualizar la tarea');
         }
         
-        // Actualizar tarea local
-        task.completed = !task.completed;
+        // Recargar todas las tareas del servidor
+        await loadUserTasks();
         
-        // Actualizar UI
-        renderCalendar();
-        loadTodayTasks();
-        
-        showNotification(`Tarea ${task.completed ? 'completada' : 'marcada como pendiente'}`, 'success');
+        showNotification(`Tarea ${data.task.completed ? 'completada' : 'marcada como pendiente'}`, 'success');
         
     } catch (error) {
         showNotification(error.message, 'error');
@@ -463,7 +486,8 @@ async function deleteTask(taskId) {
         const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
             }
         });
         
@@ -473,12 +497,8 @@ async function deleteTask(taskId) {
             throw new Error(data.error || 'Error al eliminar la tarea');
         }
         
-        // Eliminar tarea local
-        tasks = tasks.filter(task => task.id !== taskId);
-        
-        // Actualizar UI
-        renderCalendar();
-        loadTodayTasks();
+        // Recargar todas las tareas del servidor
+        await loadUserTasks();
         
         showNotification('Tarea eliminada exitosamente', 'success');
         
@@ -490,7 +510,7 @@ async function deleteTask(taskId) {
 
 // Mostrar calendario
 function showCalendar() {
-    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('calendar-screen').classList.add('active');
     
     // Actualizar información del usuario
@@ -499,13 +519,13 @@ function showCalendar() {
         document.getElementById('user-phone').textContent = currentUser.phone || 'Sin teléfono';
     }
     
-    // Renderizar calendario
-    renderCalendar();
+    // Cargar tareas del usuario desde el servidor
+    loadUserTasks();
 }
 
 // Mostrar login
 function showLogin() {
-    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('calendar-screen').classList.remove('active');
     
     // Limpiar formularios
@@ -614,7 +634,19 @@ function getTasksForDay(day) {
     
     const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    return tasks.filter(task => task.task_date === dateStr);
+    console.log(`🔍 Buscando tareas para: ${dateStr}`);
+    console.log(`🔍 Total de tareas disponibles: ${tasks.length}`);
+    
+    const dayTasks = tasks.filter(task => {
+        // Extraer solo la fecha (YYYY-MM-DD) del timestamp ISO
+        const taskDate = task.task_date.split('T')[0];
+        console.log(`   - Tarea: "${task.title}", Fecha: "${task.task_date}" → "${taskDate}", Match: ${taskDate === dateStr}`);
+        return taskDate === dateStr;
+    });
+    
+    console.log(`🔍 Tareas encontradas para ${dateStr}: ${dayTasks.length}`);
+    
+    return dayTasks;
 }
 
 // Mostrar detalles del día

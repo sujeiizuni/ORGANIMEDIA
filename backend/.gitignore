@@ -1,0 +1,50 @@
+# Archivos y directorios a ignorar
+
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Variables de entorno
+.env
+.env.local
+.env.production
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# SQLite (ya no se usa, pero por si acaso)
+*.sqlite
+*.sqlite3
+*.db
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Build y distribución
+dist/
+build/
+
+# Backups
+*.bak
+*.backup
+
+# PM2
+.pm2/
